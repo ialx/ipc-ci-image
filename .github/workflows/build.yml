@@ -20,6 +20,7 @@ jobs:
           - {"platform": "mstar", "release": "337"}
     permissions:
       id-token: write
+      contents: read
       attestations: write
     steps:
       -
