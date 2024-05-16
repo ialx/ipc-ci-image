@@ -1,8 +1,14 @@
 name: build
+
+permissions:
+  id-token: write
+  attestations: write
+  
 on:
   push:
     branches:
       - main
+
 jobs:
   docker:
     runs-on: ubuntu-latest
