@@ -1,8 +1,8 @@
 name: build
 
-permissions:
-  id-token: write
-  attestations: write
+env:
+  REGISTRY: hub.docker.com
+  IMAGE_NAME: ${{ github.repository }}
   
 on:
   push:
@@ -18,6 +18,9 @@ jobs:
         include:
           - {"platform": "ingenic", "release": "t31"}
           - {"platform": "mstar", "release": "337"}
+    permissions:
+      id-token: write
+      attestations: write
     steps:
       -
         name: Checkout
@@ -44,13 +47,13 @@ jobs:
           context: .
           file: ./Dockerfile.${{matrix.platform}}_${{matrix.release}}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ github.repository }}:${{matrix.platform}}_${{matrix.release}}
           labels: ${{ steps.meta.outputs.labels }}
       
       
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.platform }}_${{ matrix.release }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
