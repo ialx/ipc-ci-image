@@ -1,0 +1,57 @@
+image: docker:20.10.12
+
+services:
+  - docker:20.10.12-dind
+
+stages:
+  - build
+
+build:
+  variables:
+    DOCKER_BUILDKIT: 1
+    BUILDX_PLATFORMS: linux/amd64,linux/arm64
+    BUILDX_BINARY_URL: https://github.com/docker/buildx/releases/download/v0.4.2/buildx-v0.4.2.linux-amd64
+  before_script:
+    - sleep 3
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+
+    # Install buildx tool
+    - apk add --no-cache ca-certificates curl
+    - curl --output docker-buildx --silent --show-error --location --fail --retry 3 "$BUILDX_BINARY_URL"
+    - mkdir -p ~/.docker/cli-plugins
+    - mv docker-buildx ~/.docker/cli-plugins/ && chmod a+x ~/.docker/cli-plugins/docker-buildx
+    - docker buildx install
+
+    # Run binfmt
+    - docker run --rm --privileged tonistiigi/binfmt:latest --install "$BUILDX_PLATFORMS"
+    - docker context create buildx-context
+    - docker buildx create --platform linux/arm64 --name builder_arm --use buildx-context
+    - docker buildx use builder_arm
+    - docker buildx inspect --bootstrap
+  stage: build
+  only:
+    - tags
+  tags:
+    - kube
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+
+    # Build AMD64 image
+    - docker buildx build -t $CI_REGISTRY_IMAGE:${PLATFORM}_${SOC}-amd64
+      --platform linux/amd64
+      --no-cache
+      --load
+      -f Dockerfile.${PLATFORM}_${SOC} .
+
+    # Put images to registry
+    - docker push $CI_REGISTRY_IMAGE:${PLATFORM}_${SOC}-amd64
+    - docker manifest create
+      $CI_REGISTRY_IMAGE:${PLATFORM}_${SOC}
+      --amend $CI_REGISTRY_IMAGE:${PLATFORM}_${SOC}-amd64
+    - docker manifest push $CI_REGISTRY_IMAGE:${PLATFORM}_${SOC}
+  parallel:
+    matrix:
+      - PLATFORM: ingenic
+        SOC: t31
+      - PLATFORM: mstar
+        SOC: 337

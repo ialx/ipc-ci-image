@@ -1,0 +1,21 @@
+name: build
+on:
+  push:
+    branches:
+      - master
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {"platform": "ingenic", "release": "t31"}
+          - {"platform": "mstar", "release": "337"}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      - 
+        name: Build the Docker image
+        run: docker build . --file Dockerfile.${{matrix.platform}}_${{matrix.release}} --tag my-image-name:${{matrix.platform}}_${{matrix.release}}

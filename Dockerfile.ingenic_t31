@@ -1,0 +1,67 @@
+FROM debian:buster-slim AS build
+
+ENV LIBJPEG_VERSION 9c
+ENV LIBJPEG_SITE http://www.ijg.org/files
+ENV LIBJPEG_SOURCE jpegsrc.v${LIBJPEG_VERSION}.tar.gz
+ENV LIBJPEG_LICENSE IJG
+ENV LIBJPEG_LICENSE_FILES README
+ENV LIBJPEG_INSTALL_STAGING YES
+ENV LIBJPEG_PROVIDES jpeg
+
+RUN apt update && \
+    apt install -y openssl wget unzip xz-utils make binutils build-essential && \
+    apt clean cache && \
+    rm -rf /var/cache/apk/* && \
+    mkdir /toolchain
+
+# install libiconv
+RUN mkdir /tmp/libiconv && \
+    wget -O /tmp/libiconv-1.17.tar.gz https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz && \
+    tar -xvzpf /tmp/libiconv-1.17.tar.gz -C /tmp/libiconv && \
+    cd /tmp/libiconv/libiconv-1.17 && \
+    ./configure --prefix=/usr/local/libiconv && \
+    make && make install
+
+# install libjpeg
+RUN mkdir /tmp/libjpeg && \
+    wget -O /tmp/libjpeg-${LIBJPEG_VERSION}.tar.gz ${LIBJPEG_SITE}/${LIBJPEG_SOURCE} && \
+    tar -xvzpf /tmp/libjpeg-${LIBJPEG_VERSION}.tar.gz -C /usr/local/src && \
+    tar -xvzpf /tmp/libjpeg-${LIBJPEG_VERSION}.tar.gz -C /tmp/libjpeg && \
+    cd /tmp/libjpeg/jpeg-${LIBJPEG_VERSION} && \
+    ./configure --prefix=/usr/local/libjpeg && \
+    make && make install
+
+FROM debian:buster-slim AS prod
+
+LABEL org.opencontainers.image.authors="ialx@is74.ru"
+
+ARG TOOLCHAIN_PLATFORM=ingenic
+ARG TOOLCHAIN_SOC=t31
+
+RUN apt update && \
+    apt install -y openssl wget unzip xz-utils make binutils && \
+    apt clean cache && \
+    rm -rf /var/cache/apk/* && \
+    mkdir /toolchain
+
+# Copy prebuild dependencies
+COPY --from=build /usr/local/libiconv /usr/local
+COPY --from=build /usr/local/libjpeg /usr/local
+
+# Also copy sources for cross-compilation
+COPY --from=build /usr/local/src /usr/local/src
+
+# Update shared libraries database
+RUN ldconfig
+
+ADD toolchain/${TOOLCHAIN_PLATFORM}_${TOOLCHAIN_SOC} /toolchain
+
+RUN mkdir -p /usr/local/toolchain && \
+    mkdir -p /tmp/extract && \
+    unzip /toolchain/ingenic_T31_mips-gcc540-glibc222-64bit-r3.3.0.zip -d /tmp/extract/ && \
+    tar -xvzpf /tmp/extract/mips-gcc540-glibc222-64bit-r3.3.0.tar.gz -C /usr/local/toolchain && \
+    rm -rf /tmp/extract
+
+ENV TOOLCHAIN_ROOT=/usr/local/toolchain/mips-gcc540-glibc222-64bit-r3.3.0
+
+WORKDIR /build
